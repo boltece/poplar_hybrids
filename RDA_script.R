@@ -27,47 +27,32 @@ source('~/Desktop/Imports.R')
 ############################### ENV data for RDA ##################################
 setwd("./RDA/")
 
-
-df_mod <- read.csv("./Modified_transect_assignments_with_ClimGeo_data.csv")
-df_mod <- df_mod[,-1]
-
-#env correlations
-
-env_all <- df_mod[,3:30]
-corr <- cor(env_all, use="complete.obs", method="pearson")
-
-
-corr_NA <- round(corr,2)
-write.csv(corr_NA,"./Correlations_env_variables_546_samples.csv")
-corr_NA[which(abs(corr) < .75)] <- NA
-abs(corr_NA)
-write.csv(corr_NA, "./DF_correlations_env_546samples_NA_is_under0.75.csv")
-
+df_mod <- read.csv("./climateNA_7var_1961-1990Y_30arcsec_original_elev.csv")
 
 
 head(df_mod)
 
-MAT <- df_mod[,6]
-TD <- df_mod[,9]
-MWMT <- df_mod[,7]
-MAP <- df_mod[,10]
-RH <- df_mod[,28]
-PAS <- df_mod[,22]
-CMD <- df_modn[,27]
-
-climate_7var <- cbind(MAT,TD, MAP, MWMT, PAS, CMD, RH)
-clim7_scaled <- apply(climate_7var, 2, scale)
-clim_df <-as.data.frame(clim7_scaled)
+MAT <- df_mod$MAT
+TD <- df_mod$TD
+MAP <- df_mod$MAP
+RH <- df_mod$RH
+PAS <- df_mod$PAS
+CMD <- df_mod$CMD
 
 
-lat <- df_mod$Latitude
-long <- df_mod$Longitude
-elev <- df_mod$Elevation
+climate_6var <- cbind(TD, MAP, MAT, PAS, CMD, RH)
+clim6_scaled <- apply(climate_6var, 2, scale)
+clim6_df <-as.data.frame(clim6_scaled)
+
+lat <- df_mod$lat
+long <- df_mod$long
+elev <- df_mod$elev
 geo_df <- cbind(long, lat, elev)
 geo_scaled <- apply(geo_df,2, scale)
 geo_scaled <- as.data.frame(geo_scaled)
 
-geo_clim <- cbind(geo_scaled, clim_df)
+geo_clim <- cbind(geo_scaled, clim6_df)
+
 
 ################################ GENETIC data for RDA ##################################
 
@@ -88,14 +73,7 @@ rownames(df012_txt)<- df012_indv$V1
 View(df012_txt[1:100,1:100])
 
 df012_pos <- read.table("./poplar_546trees_mac2_missingNONE_LDpruned_POStxtFILE.recode.vcf.012.pos")
-df012_pos_v2 <- paste(df012_pos$V1, df012_pos$V2, sep="_")
-df012_pos_v2<- as.data.frame(df012_pos_v2)
 
-colnames(df012_pos_v2) <- "SNP_position"
-df012_pos_v2_t <- t(df012_pos_v2)
-colnames(df012_txt) <- df012_pos_v2_t
-
-write.table(df012_txt, "./poplar_546trees_mac2_missingNONE_LDpruned.txt", sep="\t", col.names = T, row.names=T, quote=F)
 
 
 ############################### SCALE genetic data ####################################
@@ -120,15 +98,24 @@ View(scaled_df012[1:20,1:20])
 
 
 
-
-
-
 ########################### partitioning of variance ################################
 
 
 
-vp<- varpart(scaled_df012, ~ as.matrix(clim_df), ~ as.matrix(geo_scaled))
+vp<- varpart(scaled_df012, ~ as.matrix(clim6_df), ~ as.matrix(geo_scaled))
 vp
+sink('./...vp_analysis-output_6climate_variables_3geo_30sec.txt')
+vp
+sink()
+
+
+
+climate_ind_accounts <- (0.00593/0.02174)*100 # % PVE
+climate_ind_accounts #27.27691
+geo_ind_accounts <- (0.00305/0.02174)*100 # % PVE
+geo_ind_accounts # 14.02944
+confounded_effect <- ((0.02174-0.01869-0.01581)/0.02174)*100
+confounded_effect # -58.69365
 
 
 
@@ -141,23 +128,30 @@ n <- rda(formula = scaled_df012 ~.,scale=FALSE, center=TRUE, data = geo_clim)
 anova(n)
 
 
-
-saveRDS(n,'./RDA_poplar_546trees_clim_geo_scaled.RDS')
+saveRDS(n,'./RDA_poplar_546trees_6clim_3geo_scaled.RDS')
 
 RsquareAdj(n)
 
 summary(eigenvals(n,model='constrained'))
 
+
+
 RDA1_gen <- sort(abs(summary(n)$biplot[,1]),decreasing=TRUE)
 RDA1_gen
+#       TD       MAT       lat       CMD       MAP        RH      elev      long       PAS 
+#  0.8733938 0.8361764 0.6858393 0.5986085 0.3219190 0.3044263 0.2222795 0.2039641 0.1232221 
 
 RDA2_gen <- sort(abs(summary(n)$biplot[,2]),decreasing=TRUE)
 RDA2_gen
+#   RH       elev      long       lat       MAP       CMD       PAS        TD       MAT 
+# 0.7626349 0.7340418 0.6985703 0.6381888 0.5080226 0.5064831 0.4519596 0.2507629 0.1743819 
 
 sort(abs(summary(n)$biplot[,1]) + abs(summary(n)$biplot[,2]),decreasing=TRUE)
+#       lat        TD       CMD        RH       MAT      elev      long       MAP       PAS 
+#.  1.3240281 1.1241567 1.1050916 1.0670611 1.0105583 0.9563213 0.9025344 0.8299417 0.5751817 
 
 RDA_df <- as.data.frame(summary(n)$biplot)
-write.csv(RDA_df,'RDA_poplar_546trees_clim_geo_scaled.csv',row.names = F)
+write.csv(RDA_df,'./RDA_poplar_546trees_6clim_3geo_scaled.csv',row.names = F)
 
 
 anova(n,by="axis")
@@ -166,7 +160,7 @@ anova(n,by="axis")
 ###################################### ggplot ############################################
 
 
-n <- readRDS('./RDA_poplar_546trees_clim_geo_scaled.RDS')
+n <- readRDS('./RDA_poplar_546trees_6clim_3geo_scaled.RDS')
 
 
 ### file prep 
@@ -186,12 +180,12 @@ pca_df <- read.csv("./pca_df_final_546.csv")
 
 rda_df2 <- data.frame(ID=as.character(df_mod$ID),ANC=as.character(pca_df$Pop),
                       TRANSECT=as.character(df_mod$Transect_SL)) 
-### some samples collected to increase the sample size of balsamifera were labeled with a region
-### We reassigned these samples to the closest transect
+
+
               
 rda_indv <- cbind(rda_df2,rda_indv)
-write.csv(rda_indv, "./RDA_indv_assignment_loadings_clim_geo_scaled_modified_transects.csv")
-rda_indv <-read.csv("./RDA_indv_assignment_loadings_clim_geo_scaled_modified_transects.csv")
+write.csv(rda_indv, "./RDA_indv_assignment_loadings_6clim_3geo_scaled_modified_transects.csv")
+rda_indv <-read.csv("./RDA_indv_assignment_loadings_6clim_3geo_scaled_modified_transects.csv")
 rda_biplot <- as.data.frame(n_sum$biplot)
 rda_biplot$var <- row.names(rda_biplot)
 
@@ -205,17 +199,18 @@ mult <- attributes(basplot$biplot)$arrow.mul
 
 
 rda_plot <- ggplot(data=rda_indv, aes(x=RDA1, y=RDA2)) + 
-  geom_point(aes(colour=ANC)) +
-  scale_color_gradient(low="deepskyblue", high="blue4") +
+  #geom_point(aes(colour=ANC)) +
+  geom_point(data=rda_indv, aes(x=RDA1, y=RDA2,fill=ANC),pch=21,col='black',size=3) +
+  scale_fill_gradient(low="deepskyblue", high="blue4") +
   xlim(-15, 15) +
   ylim(-15,15) +
   geom_segment(data = rda_biplot,
-               aes(x = 0, xend = mult * RDA1 * 0.5,y = 0, yend = mult * RDA2 * 0.5),
-               arrow = arrow(length = unit(0.15, "cm")), colour = "black") + #grid is required for arrow to work.
+               aes(x = 0, xend = mult * RDA1 * 0.95,y = 0, yend = mult * RDA2 * 0.95),
+               arrow = arrow(length = unit(0.35, "cm")), colour = "black") + #grid is required for arrow to work.
   geom_label_repel(data = rda_biplot,
                    aes(x= (mult + mult/5) * RDA1, y = (mult + mult/5) * RDA2, #we add 10% to the text to push it slightly out from arrows
                        label = var), #otherwise you could use hjust and vjust. I prefer this option
-                   size = 4,fontface = "bold") + 
+                   size = 5,fontface = "bold") + 
   xlab(RDA1_pve) + ylab(RDA2_pve) +theme_bw()  + 
   theme(#legend.position = "none",
     axis.text = element_text(size=13), 
@@ -225,7 +220,7 @@ rda_plot <- ggplot(data=rda_indv, aes(x=RDA1, y=RDA2)) +
 
 rda_plot  
 
-ggsave('RDA_label_clim_geo_scaled.pdf',rda_plot,height=6,width=7,units='in')
+ggsave('./RDA_label_6clim_3geo_scaled.pdf',rda_plot,height=6,width=9,units='in')
 
 
 
@@ -235,15 +230,15 @@ ggsave('RDA_label_clim_geo_scaled.pdf',rda_plot,height=6,width=7,units='in')
 col_trans <- c("#FFDB6D", "#C4961A","#D16103", "#C3D7A4", "#52854C", "#4E84C4", "#293352")
 
 rda_plot_transect <- ggplot(data=rda_indv, aes(x=RDA1, y=RDA2)) + 
-  geom_point(data=rda_indv, aes(x=RDA1, y=-1*RDA2,fill=TRANSECT),pch=21,col='black',size=3) +
+  geom_point(data=rda_indv, aes(x=RDA1, y= RDA2,fill=TRANSECT),pch=21,col='black',size=3) +
   xlim(-15, 15) +
   ylim(-15,15) +
   scale_fill_manual(values=col_trans) +
   geom_segment(data = rda_biplot,
-               aes(x = 0, xend = mult * RDA1 * 0.95,y = 0, yend = mult * -1*RDA2 * 0.95), linewidth=1.0,
+               aes(x = 0, xend = mult * RDA1 * 0.95,y = 0, yend = mult * RDA2 * 0.95), linewidth=1.0,
                arrow = arrow(length = unit(0.35, "cm")), colour = "black") + #grid is required for arrow to work.
   geom_label_repel(data = rda_biplot,
-                   aes(x= (mult + mult/7) * RDA1, y = (mult + mult/7) * -1*RDA2, #we add 10% to the text to push it slightly out from arrows
+                   aes(x= (mult + mult/7) * RDA1, y = (mult + mult/7) * RDA2, #we add 10% to the text to push it slightly out from arrows
                        label = var), #otherwise you could use hjust and vjust. I prefer this option
                    size = 5,fontface = "bold") + 
   xlab(RDA1_pve) + ylab(RDA2_pve) +theme_bw()  + 
@@ -255,7 +250,7 @@ rda_plot_transect <- ggplot(data=rda_indv, aes(x=RDA1, y=RDA2)) +
 
 rda_plot_transect 
 
-ggsave('./RDA_Transects_label_V2_clim_geo_scaled.pdf',rda_plot_transect,height=6,width=9,units='in')
+ggsave('./RDA_Transects_label_V2_6clim_3geo_scaled.pdf',rda_plot_transect,height=6,width=9,units='in')
 
 
 
